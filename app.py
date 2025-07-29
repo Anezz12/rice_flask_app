@@ -12,13 +12,30 @@ import cv2
 
 app = Flask(__name__)
 
+# Load model with compatibility handling
+def load_model_safely():
+    try:
+        # Try loading with custom_objects for compatibility
+        model = load_model('rice_classification_model.h5', compile=False)
+        print("Model loaded successfully!")
+        return model
+    except Exception as e:
+        print(f"Error loading model with standard method: {e}")
+        try:
+            # Try with different loading method
+            from tensorflow.keras.models import model_from_json
+            import h5py
+            
+            # Alternative loading method
+            model = tf.keras.models.load_model('rice_classification_model.h5', compile=False)
+            print("Model loaded with alternative method!")
+            return model
+        except Exception as e2:
+            print(f"Error loading model with alternative method: {e2}")
+            return None
+
 # Load model
-try:
-    model = load_model('rice_classification_model.h5')
-    print("Model loaded successfully!")
-except Exception as e:
-    print(f"Error loading model: {e}")
-    model = None
+model = load_model_safely()
 
 # Label klasifikasi sesuai model Anda
 class_names = ['Arborio', 'Basmati', 'Ipsala', 'Jasmine']
