@@ -11,7 +11,14 @@ from tensorflow.keras.models import load_model
 import cv2
 
 app = Flask(__name__)
-model = load_model('rice_classification_model.h5')
+
+# Load model
+try:
+    model = load_model('rice_classification_model.h5')
+    print("Model loaded successfully!")
+except Exception as e:
+    print(f"Error loading model: {e}")
+    model = None
 
 # Label klasifikasi sesuai model Anda
 class_names = ['Arborio', 'Basmati', 'Ipsala', 'Jasmine']
@@ -29,8 +36,15 @@ def preprocess_image(img_path):
 def index():
     return render_template('index.html')
 
+@app.route('/health')
+def health():
+    return jsonify({'status': 'healthy', 'model_loaded': model is not None})
+
 @app.route('/predict', methods=['POST'])
 def predict():
+    if model is None:
+        return jsonify({'error': 'Model not loaded'}), 500
+        
     if 'file' not in request.files:
         return jsonify({'error': 'No file uploaded'}), 400
     file = request.files['file']
@@ -43,19 +57,30 @@ def predict():
         os.makedirs(static_dir)
 
     file_path = os.path.join('static', file.filename)
-    file.save(file_path)
+    
+    try:
+        file.save(file_path)
+        img = preprocess_image(file_path)
+        predictions = model.predict(img)
+        predicted_index = np.argmax(predictions)
+        predicted_label = class_names[predicted_index]
+        confidence = float(np.max(predictions))
 
-    img = preprocess_image(file_path)
-    predictions = model.predict(img)
-    predicted_index = np.argmax(predictions)
-    predicted_label = class_names[predicted_index]
-    confidence = float(np.max(predictions))
+        # Clean up uploaded file
+        if os.path.exists(file_path):
+            os.remove(file_path)
 
-    return jsonify({
-        'prediction': predicted_label,
-        'class_index': int(predicted_index),
-        'confidence': round(confidence, 3)
-    })
+        return jsonify({
+            'prediction': predicted_label,
+            'class_index': int(predicted_index),
+            'confidence': round(confidence, 3)
+        })
+    except Exception as e:
+        # Clean up uploaded file if error occurs
+        if os.path.exists(file_path):
+            os.remove(file_path)
+        return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port, debug=False)
