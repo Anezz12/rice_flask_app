@@ -1,0 +1,17 @@
+sena/rice_flask_app/.gitignore
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+pip-log.txt
+pip-delete-this-directory.txt
+.DS_Store
+.idea/
+*.log
+static/*.jpg
+static/*.png
+static/*.jpeg

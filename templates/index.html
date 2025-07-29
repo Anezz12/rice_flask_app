@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="id">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Rice Classifier - Klasifikasi Jenis Beras</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        min-height: 100vh;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        padding: 20px;
+      }
+
+      .container {
+        background: white;
+        border-radius: 20px;
+        box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+        padding: 40px;
+        max-width: 500px;
+        width: 100%;
+        text-align: center;
+      }
+
+      h1 {
+        color: #333;
+        margin-bottom: 30px;
+        font-size: 2rem;
+        font-weight: 600;
+      }
+
+      .upload-area {
+        border: 3px dashed #ddd;
+        border-radius: 15px;
+        padding: 40px;
+        margin: 20px 0;
+        transition: all 0.3s ease;
+        cursor: pointer;
+      }
+
+      .upload-area:hover {
+        border-color: #667eea;
+        background-color: #f8f9ff;
+      }
+
+      .upload-area.dragover {
+        border-color: #667eea;
+        background-color: #f0f4ff;
+      }
+
+      .file-input {
+        display: none;
+      }
+
+      .upload-btn {
+        background: linear-gradient(135deg, #667eea, #764ba2);
+        color: white;
+        border: none;
+        padding: 15px 30px;
+        border-radius: 10px;
+        font-size: 1.1rem;
+        cursor: pointer;
+        transition: transform 0.2s ease;
+        margin-top: 20px;
+      }
+
+      .upload-btn:hover {
+        transform: translateY(-2px);
+      }
+
+      .upload-btn:disabled {
+        background: #ccc;
+        cursor: not-allowed;
+        transform: none;
+      }
+
+      .preview-container {
+        margin: 20px 0;
+        display: none;
+      }
+
+      .preview-image {
+        max-width: 200px;
+        max-height: 200px;
+        border-radius: 10px;
+        box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+      }
+
+      .result-container {
+        margin-top: 30px;
+        padding: 20px;
+        background: #f8f9fa;
+        border-radius: 15px;
+        display: none;
+      }
+
+      .result-success {
+        background: linear-gradient(135deg, #4facfe, #00f2fe);
+        color: white;
+      }
+
+      .result-error {
+        background: linear-gradient(135deg, #ff6b6b, #ee5a52);
+        color: white;
+      }
+
+      .prediction-result {
+        font-size: 1.5rem;
+        font-weight: bold;
+        margin: 10px 0;
+      }
+
+      .confidence-bar {
+        background: rgba(255, 255, 255, 0.3);
+        border-radius: 10px;
+        height: 20px;
+        margin: 10px 0;
+        overflow: hidden;
+      }
+
+      .confidence-fill {
+        height: 100%;
+        background: rgba(255, 255, 255, 0.8);
+        transition: width 0.5s ease;
+        border-radius: 10px;
+      }
+
+      .loading {
+        display: none;
+        margin: 20px 0;
+      }
+
+      .spinner {
+        border: 4px solid #f3f3f3;
+        border-top: 4px solid #667eea;
+        border-radius: 50%;
+        width: 40px;
+        height: 40px;
+        animation: spin 1s linear infinite;
+        margin: 0 auto;
+      }
+
+      @keyframes spin {
+        0% {
+          transform: rotate(0deg);
+        }
+        100% {
+          transform: rotate(360deg);
+        }
+      }
+
+      .rice-types {
+        margin-top: 20px;
+        font-size: 0.9rem;
+        color: #666;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>🌾 Klasifikasi Jenis Beras</h1>
+      <p>Upload gambar beras untuk mengetahui jenisnya</p>
+
+      <div
+        class="upload-area"
+        onclick="document.getElementById('fileInput').click()"
+      >
+        <div id="uploadText">
+          📁 Klik atau drag & drop gambar disini<br />
+          <small>Format: JPG, PNG, JPEG</small>
+        </div>
+      </div>
+
+      <form id="uploadForm" enctype="multipart/form-data">
+        <input
+          type="file"
+          id="fileInput"
+          name="file"
+          class="file-input"
+          accept="image/*"
+          onchange="previewImage(this)"
+        />
+      </form>
+
+      <div class="preview-container" id="previewContainer">
+        <img id="previewImage" class="preview-image" alt="Preview" />
+      </div>
+
+      <button
+        class="upload-btn"
+        id="predictBtn"
+        onclick="predictImage()"
+        disabled
+      >
+        🔍 Analisis Gambar
+      </button>
+
+      <div class="loading" id="loading">
+        <div class="spinner"></div>
+        <p>Menganalisis gambar...</p>
+      </div>
+
+      <div class="result-container" id="resultContainer">
+        <div class="prediction-result" id="predictionResult"></div>
+        <div class="confidence-bar">
+          <div class="confidence-fill" id="confidenceFill"></div>
+        </div>
+        <div id="confidenceText"></div>
+      </div>
+
+      <div class="rice-types">
+        <strong>Jenis Beras yang dapat dideteksi:</strong><br />
+        🌾 Arborio • 🌾 Basmati • 🌾 Ipsala • 🌾 Jasmine
+      </div>
+    </div>
+
+    <script>
+      function previewImage(input) {
+        if (input.files && input.files[0]) {
+          const reader = new FileReader();
+          reader.onload = function (e) {
+            document.getElementById('previewImage').src = e.target.result;
+            document.getElementById('previewContainer').style.display = 'block';
+            document.getElementById('predictBtn').disabled = false;
+            document.getElementById('resultContainer').style.display = 'none';
+          };
+          reader.readAsDataURL(input.files[0]);
+        }
+      }
+
+      function predictImage() {
+        const fileInput = document.getElementById('fileInput');
+        const file = fileInput.files[0];
+
+        if (!file) {
+          alert('Silakan pilih gambar terlebih dahulu!');
+          return;
+        }
+
+        const formData = new FormData();
+        formData.append('file', file);
+
+        // Show loading
+        document.getElementById('loading').style.display = 'block';
+        document.getElementById('resultContainer').style.display = 'none';
+        document.getElementById('predictBtn').disabled = true;
+
+        fetch('/predict', {
+          method: 'POST',
+          body: formData,
+        })
+          .then((response) => response.json())
+          .then((data) => {
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('predictBtn').disabled = false;
+
+            const resultContainer = document.getElementById('resultContainer');
+
+            if (data.error) {
+              resultContainer.className = 'result-container result-error';
+              document.getElementById('predictionResult').innerHTML =
+                '❌ Error: ' + data.error;
+              document.getElementById('confidenceFill').style.width = '0%';
+              document.getElementById('confidenceText').innerHTML = '';
+            } else {
+              resultContainer.className = 'result-container result-success';
+              document.getElementById('predictionResult').innerHTML =
+                '🌾 Jenis Beras: ' + data.prediction;
+
+              const confidence = (data.confidence * 100).toFixed(1);
+              document.getElementById('confidenceFill').style.width =
+                confidence + '%';
+              document.getElementById('confidenceText').innerHTML =
+                'Tingkat Kepercayaan: ' + confidence + '%';
+            }
+
+            resultContainer.style.display = 'block';
+          })
+          .catch((error) => {
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('predictBtn').disabled = false;
+
+            const resultContainer = document.getElementById('resultContainer');
+            resultContainer.className = 'result-container result-error';
+            resultContainer.style.display = 'block';
+            document.getElementById('predictionResult').innerHTML =
+              '❌ Terjadi kesalahan: ' + error.message;
+            document.getElementById('confidenceFill').style.width = '0%';
+            document.getElementById('confidenceText').innerHTML = '';
+          });
+      }
+
+      // Drag and drop functionality
+      const uploadArea = document.querySelector('.upload-area');
+
+      uploadArea.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        uploadArea.classList.add('dragover');
+      });
+
+      uploadArea.addEventListener('dragleave', () => {
+        uploadArea.classList.remove('dragover');
+      });
+
+      uploadArea.addEventListener('drop', (e) => {
+        e.preventDefault();
+        uploadArea.classList.remove('dragover');
+
+        const files = e.dataTransfer.files;
+        if (files.length > 0) {
+          document.getElementById('fileInput').files = files;
+          previewImage(document.getElementById('fileInput'));
+        }
+      });
+    </script>
+  </body>
+</html>
