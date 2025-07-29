@@ -7,38 +7,61 @@ tf.get_logger().setLevel('ERROR')
 
 from flask import Flask, request, jsonify, render_template
 import numpy as np
-from tensorflow.keras.models import load_model
 import cv2
 
 app = Flask(__name__)
 
-# Load model with compatibility handling
-def load_model_safely():
-    try:
-        # Try loading with custom_objects for compatibility
-        model = load_model('rice_classification_model.h5', compile=False)
-        print("Model loaded successfully!")
-        return model
-    except Exception as e:
-        print(f"Error loading model with standard method: {e}")
-        try:
-            # Try with different loading method
-            from tensorflow.keras.models import model_from_json
-            import h5py
-            
-            # Alternative loading method
-            model = tf.keras.models.load_model('rice_classification_model.h5', compile=False)
-            print("Model loaded with alternative method!")
-            return model
-        except Exception as e2:
-            print(f"Error loading model with alternative method: {e2}")
-            return None
-
-# Load model
-model = load_model_safely()
+# Global variable untuk model
+model = None
 
 # Label klasifikasi sesuai model Anda
 class_names = ['Arborio', 'Basmati', 'Ipsala', 'Jasmine']
+
+def load_model_on_demand():
+    global model
+    if model is None:
+        try:
+            # Method 1: Standard loading
+            from tensorflow.keras.models import load_model
+            model = load_model('rice_classification_model.h5', compile=False)
+            print("Model loaded successfully!")
+        except Exception as e:
+            print(f"Standard loading failed: {e}")
+            try:
+                # Method 2: Manual reconstruction
+                import h5py
+                # Load weights manually and reconstruct
+                model = create_model_architecture()
+                model.load_weights('rice_classification_model.h5')
+                print("Model loaded via manual reconstruction!")
+            except Exception as e2:
+                print(f"Manual reconstruction failed: {e2}")
+                try:
+                    # Method 3: TensorFlow SavedModel
+                    model = tf.keras.models.load_model('rice_classification_model.h5', 
+                                                     custom_objects=None, 
+                                                     compile=False,
+                                                     safe_mode=False)
+                    print("Model loaded with safe_mode=False!")
+                except Exception as e3:
+                    print(f"All loading methods failed: {e3}")
+                    model = None
+    return model
+
+def create_model_architecture():
+    """Create a basic model architecture - adjust based on your model"""
+    model = tf.keras.Sequential([
+        tf.keras.layers.Input(shape=(64, 64, 3)),
+        tf.keras.layers.Conv2D(32, (3, 3), activation='relu'),
+        tf.keras.layers.MaxPooling2D((2, 2)),
+        tf.keras.layers.Conv2D(64, (3, 3), activation='relu'),
+        tf.keras.layers.MaxPooling2D((2, 2)),
+        tf.keras.layers.Conv2D(64, (3, 3), activation='relu'),
+        tf.keras.layers.Flatten(),
+        tf.keras.layers.Dense(64, activation='relu'),
+        tf.keras.layers.Dense(4, activation='softmax')
+    ])
+    return model
 
 def preprocess_image(img_path):
     # Model expects (64, 64, 3) input shape
@@ -55,12 +78,19 @@ def index():
 
 @app.route('/health')
 def health():
-    return jsonify({'status': 'healthy', 'model_loaded': model is not None})
+    try:
+        current_model = load_model_on_demand()
+        return jsonify({'status': 'healthy', 'model_loaded': current_model is not None})
+    except Exception as e:
+        return jsonify({'status': 'error', 'model_loaded': False, 'error': str(e)})
 
 @app.route('/predict', methods=['POST'])
 def predict():
-    if model is None:
-        return jsonify({'error': 'Model not loaded'}), 500
+    # Load model on demand
+    current_model = load_model_on_demand()
+    
+    if current_model is None:
+        return jsonify({'error': 'Model failed to load'}), 500
         
     if 'file' not in request.files:
         return jsonify({'error': 'No file uploaded'}), 400
@@ -78,7 +108,7 @@ def predict():
     try:
         file.save(file_path)
         img = preprocess_image(file_path)
-        predictions = model.predict(img)
+        predictions = current_model.predict(img)
         predicted_index = np.argmax(predictions)
         predicted_label = class_names[predicted_index]
         confidence = float(np.max(predictions))
